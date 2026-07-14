@@ -345,26 +345,20 @@ class Files(plugins.PluginInterface, timeliner.TimeLinerInterface):
         vmlinux_module_name = self.config["kernel"]
         vmlinux = self.context.modules[vmlinux_module_name]
         vmlinux_layer = self.context.layers[vmlinux.layer_name]
-
         inodes_iter = self.get_inodes(
             context=self.context,
             vmlinux_module_name=vmlinux_module_name,
         )
-
         types_filter = self.config["type"]
         for inode_in in inodes_iter:
             if types_filter and inode_in.inode.get_inode_type() not in types_filter:
                 continue
-
             if self.config["find"]:
-                if inode_in.path == self.config["find"]:
+                if self.config["find"] in inode_in.path:  # substring, multiple hits
                     inode_out = inode_in.to_user(vmlinux_layer)
-
                     yield (0, astuple(inode_out))
-                    break  # Only the first match
             else:
                 inode_out = inode_in.to_user(vmlinux_layer)
-
                 yield (0, astuple(inode_out))
 
     def generate_timeline(self):
@@ -594,47 +588,45 @@ class InodePages(plugins.PluginInterface):
         vmlinux_module_name = self.config["kernel"]
         vmlinux = self.context.modules[vmlinux_module_name]
         vmlinux_layer = self.context.layers[vmlinux.layer_name]
-
         if self.config["inode"] and self.config["find"]:
             vollog.error("Cannot use --inode and --find simultaneously")
             return None
 
+        inodes = []
         if self.config["find"]:
             inodes_iter = Files.get_inodes(
                 context=self.context,
                 vmlinux_module_name=vmlinux_module_name,
             )
             for inode_in in inodes_iter:
-                if inode_in.path == self.config["find"]:
-                    inode = inode_in.inode
-                    break  # Only the first match
-            else:
+                if self.config["find"] in inode_in.path:  # substring, multiple hits
+                    inodes.append(inode_in.inode)
+            if not inodes:
                 vollog.error("Unable to find inode with path %s", self.config["find"])
                 return None
         elif self.config["inode"]:
-            inode = vmlinux.object("inode", self.config["inode"], absolute=True)
+            inodes.append(vmlinux.object("inode", self.config["inode"], absolute=True))
         else:
             vollog.error("You must use either --inode or --find")
             return None
 
-        if not inode.is_valid():
-            vollog.error("Invalid inode at 0x%x", inode.vol.offset)
-            return None
-
-        if not inode.is_reg:
-            vollog.error("The inode is not a regular file")
-            return None
-
-        filename = renderers.NotApplicableValue()
-        if self.config["dump"]:
-            open_method = self.open
-            inode_address = inode.vol.offset
-            filename = open_method.sanitize_filename(f"inode_0x{inode_address:x}.dmp")
-            vollog.info("[*] Writing inode at 0x%x to '%s'", inode_address, filename)
-            self.write_inode_content_to_file(
-                self.context, vmlinux_layer.name, inode, filename, open_method
-            )
-        yield from self._generate_inode_fields(inode, vmlinux_layer, filename)
+        for inode in inodes:
+            if not inode.is_valid():
+                vollog.error("Invalid inode at 0x%x", inode.vol.offset)
+                continue
+            if not inode.is_reg:
+                vollog.error("The inode is not a regular file")
+                continue
+            filename = renderers.NotApplicableValue()
+            if self.config["dump"]:
+                open_method = self.open
+                inode_address = inode.vol.offset
+                filename = open_method.sanitize_filename(f"inode_0x{inode_address:x}.dmp")
+                vollog.info("[*] Writing inode at 0x%x to '%s'", inode_address, filename)
+                self.write_inode_content_to_file(
+                    self.context, vmlinux_layer.name, inode, filename, open_method
+                )
+            yield from self._generate_inode_fields(inode, vmlinux_layer, filename)
 
     def run(self):
         headers = [
