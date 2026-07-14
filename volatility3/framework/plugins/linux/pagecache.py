@@ -345,11 +345,13 @@ class Files(plugins.PluginInterface, timeliner.TimeLinerInterface):
         vmlinux_module_name = self.config["kernel"]
         vmlinux = self.context.modules[vmlinux_module_name]
         vmlinux_layer = self.context.layers[vmlinux.layer_name]
+
         inodes_iter = self.get_inodes(
             context=self.context,
             vmlinux_module_name=vmlinux_module_name,
         )
         types_filter = self.config["type"]
+
         for inode_in in inodes_iter:
             if types_filter and inode_in.inode.get_inode_type() not in types_filter:
                 continue
@@ -359,6 +361,7 @@ class Files(plugins.PluginInterface, timeliner.TimeLinerInterface):
                     yield (0, astuple(inode_out))
             else:
                 inode_out = inode_in.to_user(vmlinux_layer)
+
                 yield (0, astuple(inode_out))
 
     def generate_timeline(self):
