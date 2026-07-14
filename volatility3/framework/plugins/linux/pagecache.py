@@ -588,6 +588,7 @@ class InodePages(plugins.PluginInterface):
         vmlinux_module_name = self.config["kernel"]
         vmlinux = self.context.modules[vmlinux_module_name]
         vmlinux_layer = self.context.layers[vmlinux.layer_name]
+
         if self.config["inode"] and self.config["find"]:
             vollog.error("Cannot use --inode and --find simultaneously")
             return None
